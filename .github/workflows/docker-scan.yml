@@ -1,0 +1,51 @@
+name: Build and Scan IoT Edge Module
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-scan:
+    name: Build Image and Run Trivy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        # We build the image but don't push it anywhere yet
+        run: docker build -t my-iot-module:${{ github.sha }} .
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'my-iot-module:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Run Trivy (SARIF output)
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'my-iot-module:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Push Image to Registry
+        if: success()
+        run: |
+          echo "Image is secure! Pushing to registry..."
+          # docker login ...
+          # docker push my-iot-module:${{ github.sha }}
